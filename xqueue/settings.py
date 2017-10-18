@@ -25,10 +25,10 @@ REQUESTS_TIMEOUT = 5    # seconds
 GRADING_TIMEOUT = 30    # seconds
 ORPHANED_SUBMISSION_TIMEOUT = 30  # seconds
 
-DB_RETRIES = 3     # Max number of times to query the DB when queued ticket is not found
+DB_RETRIES = 3     # Max number of times to query the DB when queued ticketd is not found
 DB_WAITTIME = 0.5  # seconds
 
-XQUEUES = {'test-pull': None}
+XQUEUES = {'Watcher-MITx-6.0001r': None}
 XQUEUE_WORKERS_PER_QUEUE = 4
 WORKER_COUNT = 4
 
@@ -45,6 +45,8 @@ RABBIT_HOST = 'localhost'
 RABBIT_PORT = 5672
 RABBIT_VHOST = '/'  # defaults to '/', otherwise a string
 RABBIT_TLS = False
+RABBITMQ_USER = os.environ.get('RABBITMQ_USER', 'guest')
+RABBITMQ_PASS = os.environ.get('RABBITMQ_PASS', 'guest')
 
 AWS_ACCESS_KEY_ID = "access_key_id"
 AWS_SECRET_ACCESS_KEY = "secret_access_key"
@@ -160,7 +162,7 @@ INSTALLED_APPS = (
     # 'django.contrib.admin',
     # Uncomment the next line to enable admin documentation:
     # 'django.contrib.admindocs',
-    'queue',
+    'queue_app',
     'release_util',
     'storages',
 )

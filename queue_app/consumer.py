@@ -17,8 +17,8 @@ from pika.exceptions import AMQPConnectionError
 from statsd import statsd
 from requests.exceptions import ConnectionError, Timeout
 
-from queue.producer import get_queue_length
-from queue.models import Submission
+from queue_app.producer import get_queue_length
+from queue_app.models import Submission
 
 
 log = logging.getLogger(__name__)
@@ -110,7 +110,7 @@ def get_single_qitem(queue_name):
     else:
         channel.basic_ack(method.delivery_tag)
         connection.close()
-        statsd.increment('xqueue.consumer.get_single_qitem',
+        statsd.increment('xqueue_app.consumer.get_single_qitem',
                          tags=['queue:{0}'.format(queue_name)])
         return (True, qitem)
 
@@ -132,7 +132,7 @@ def post_failure_to_lms(header):
     failure_msg = {'correct': None,
                    'score': 0,
                    'msg': msg}
-    statsd.increment('xqueue.consumer.post_failure_to_lms')
+    statsd.increment('xqueue_app.consumer.post_failure_to_lms')
     return post_grade_to_lms(header, json.dumps(failure_msg))
 
 
@@ -163,10 +163,10 @@ def post_grade_to_lms(header, body):
         attempts += 1
 
     if success:
-        statsd.increment('xqueue.consumer.post_grade_to_lms.success')
+        statsd.increment('xqueue_app.consumer.post_grade_to_lms.success')
     else:
         log.error("Unable to return to LMS: lms_callback_url: {0}, payload: {1}, lms_reply: {2}".format(lms_callback_url, payload, lms_reply))
-        statsd.increment('xqueue.consumer.post_grade_to_lms.failure')
+        statsd.increment('xqueue_app.consumer.post_grade_to_lms.failure')
 
     return success
 
@@ -358,7 +358,7 @@ class Worker(multiprocessing.Process):
                 submission = self._get_submission(submission_id)
 
                 if submission is None:
-                    statsd.increment('xqueue.consumer.consumer_callback.submission_does_not_exist',
+                    statsd.increment('xqueue_app.consumer.consumer_callback.submission_does_not_exist',
                                      tags=['queue:{0}'.format(self.queue_name)])
                     log.error("Queued pointer refers to nonexistent entry in Submission DB: queue_name: {0}, submission_id: {1}".format(
                         self.queue_name,
@@ -371,7 +371,7 @@ class Worker(multiprocessing.Process):
 
         except Exception as e:
             # catch and acknowledge the message if something goes wrong
-            statsd.increment('xqueue.consumer.consumer_callback.unknown_error',
+            statsd.increment('xqueue_app.consumer.consumer_callback.unknown_error',
                              tags=['queue:{0}'.format(self.queue_name)])
             log.error("Error processing submission_id: {0} on queue_name: {1}, {2}" .format(
                 submission_id,
@@ -410,7 +410,7 @@ class Worker(multiprocessing.Process):
         start = time.time()
         (grading_success, grader_reply) = _http_post(self.worker_url, json.dumps(payload), settings.GRADING_TIMEOUT)
         grading_time = time.time() - start
-        statsd.histogram('xqueue.consumer.consumer_callback.grading_time', grading_time,
+        statsd.histogram('xqueue_app.consumer.consumer_callback.grading_time', grading_time,
                          tags=['queue:{0}'.format(self.queue_name)])
 
         if grading_time > settings.GRADING_TIMEOUT:
@@ -418,7 +418,7 @@ class Worker(multiprocessing.Process):
                       grading_time, submission.xqueue_body, submission.urls))
 
         job_count = get_queue_length(self.queue_name)
-        statsd.gauge('xqueue.consumer.consumer_callback.queue_length', job_count,
+        statsd.gauge('xqueue_app.consumer.consumer_callback.queue_length', job_count,
                      tags=['queue:{0}'.format(self.queue_name)])
 
         submission.return_time = timezone.now()
