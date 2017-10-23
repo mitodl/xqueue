@@ -4,8 +4,7 @@ from django.core.management.base import BaseCommand
 from django.conf import settings
 from django.db.models import Q
 from django.utils import timezone
-from datetime import timedelta
-import dateutil.parser
+from datetime import datetime, timedelta
 import pprint
 
 from queue_app.models import Submission
@@ -15,7 +14,7 @@ log = logging.getLogger(__name__)
 
 
 def parse_iso_8601_string(iso_string):
-    return dateutil.parser.parse(iso_string)
+    return datetime.strptime(iso_string, "%Y-%m-%dT%H:%M:%S.%fZ").replace(tzinfo=timezone.utc)
 
 
 class Command(BaseCommand):
@@ -40,13 +39,13 @@ class Command(BaseCommand):
             '--pull-time-start',
             dest='pull_time_start',
             default=None,
-            help='Submission pull_time range start (ISO-8601 formatted - 2017-01-01T00:00:00Z, et. al.)',
+            help='Submission pull_time range start (UTC, ISO-8601 formatted - 2017-01-01T00:00:00Z, et. al.)',
         )
         parser.add_argument(
             '--pull-time-end',
             dest='pull_time_end',
             default=None,
-            help='Submission pull_time range end (ISO-8601 formatted - 2017-01-01T00:00:00Z, et. al.)',
+            help='Submission pull_time range end (UTC, ISO-8601 formatted - 2017-01-01T00:00:00Z, et. al.)',
         )
         parser.add_argument(
             '--ignore-failures',
@@ -54,6 +53,13 @@ class Command(BaseCommand):
             dest='ignore_failures',
             default=False,
             help='Requeue the submissions even if their num_failures is greater than the max in settings',
+        )
+        parser.add_argument(
+            '--include-null-pull-time',
+            action='store_true',
+            dest='include_null_pull_time',
+            default=False,
+            help='Requeue the submissions even if the pull_time value is null (None)',
         )
         parser.add_argument(
             '--echo',
@@ -64,33 +70,34 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        query_exclude_params = dict(
+        grading_success_params = dict(
             lms_ack=1,
             retired=1
         )
-        query_param_dict = {}
-        query_param_list = []
+        filter_params = {}
+        exclude_params = {}
         if options['queue_names']:
-            query_param_dict['queue_name__in'] = options['queue_names'].split(',')
+            filter_params['queue_name__in'] = options['queue_names'].split(',')
         if options['submission_ids']:
-            query_param_dict['id__in'] = options['submission_ids'].split(',')
-        if options['pull_time_start']:
-            query_param_dict['pull_time__gte'] = parse_iso_8601_string(options['pull_time_start'])
-        if options['pull_time_end']:
-            query_param_dict['pull_time__lte'] = parse_iso_8601_string(options['pull_time_end'])
-            query_exclude_params['pull_time'] = None
-        else:
-            query_param_list.append(
-                Q(pull_time__lte=timezone.now() - timedelta(seconds=settings.PULLED_SUBMISSION_TIMEOUT)) |
-                Q(pull_time=None)
-            )
+            filter_params['id__in'] = options['submission_ids'].split(',')
+        if not options['include_null_pull_time']:
+            exclude_params['pull_time'] = None
+            if options['pull_time_start']:
+                filter_params['pull_time__gte'] = parse_iso_8601_string(options['pull_time_start'])
+            if options['pull_time_end']:
+                filter_params['pull_time__lte'] = parse_iso_8601_string(options['pull_time_end'])
+            else:
+                filter_params['pull_time__lte'] = (
+                    timezone.now() - timedelta(seconds=settings.PULLED_SUBMISSION_TIMEOUT)
+                )
         if not options['ignore_failures']:
-            query_param_dict['num_failures__lt'] = settings.MAX_NUMBER_OF_FAILURES
+            filter_params['num_failures__lt'] = settings.MAX_NUMBER_OF_FAILURES
 
         submission_qset = (
             Submission.objects
-            .filter(*query_param_list, **query_param_dict)
-            .exclude(**query_exclude_params)
+            .filter(**filter_params)
+            .exclude(**grading_success_params)
+            .exclude(**exclude_params)
             .order_by('-push_time')
         )
         if options['echo']:
@@ -98,15 +105,19 @@ class Command(BaseCommand):
             for submission in submission_qset.values(*self.ECHO_PROPERTIES)[0:self.ECHO_LIMIT]:
                 self.stdout.write(pp.pformat(submission))
             num_submissions = submission_qset.count()
-            self.stdout.write("\nMatching submission count: {}".format(num_submissions))
+            self.stdout.write("\nMatching submission count: {0}".format(num_submissions))
             if num_submissions > self.ECHO_LIMIT:
                 submission_ids = submission_qset.values_list('id', flat=True)
-                self.stdout.write("\nIDs: {}\n\n".format(','.join(map(str, submission_ids))))
+                self.stdout.write("\nIDs: {0}\n\n".format(','.join(map(str, submission_ids))))
         else:
             self.requeue_submissions(submission_qset)
-    
+
     def requeue_submissions(self, submission_qset):
-        self.stdout.write("Queueing {} submissions...".format(submission_qset.count()))
+        num_submissions = submission_qset.count()
+        if num_submissions == 0:
+            self.stdout.write("No matching submissions to queue.")
+            return
+        self.stdout.write("Queueing {0} submissions...".format(num_submissions))
         for submission in submission_qset:
             if submission.pull_time:
                 submission.num_failures += 1
