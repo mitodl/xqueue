@@ -2,7 +2,6 @@ import logging
 
 from django.core.management.base import BaseCommand
 from django.conf import settings
-from django.db.models import Q
 from django.utils import timezone
 from datetime import datetime, timedelta
 import pprint
@@ -55,16 +54,9 @@ class Command(BaseCommand):
             help='Requeue the submissions even if their num_failures is greater than the max in settings',
         )
         parser.add_argument(
-            '--include-null-pull-time',
+            '--dry-run',
             action='store_true',
-            dest='include_null_pull_time',
-            default=False,
-            help='Requeue the submissions even if the pull_time value is null (None)',
-        )
-        parser.add_argument(
-            '--echo',
-            action='store_true',
-            dest='echo',
+            dest='dry_run',
             default=False,
             help='Echo the submissions that will be queued for grading (instead of actually queueing them)',
         )
@@ -74,14 +66,12 @@ class Command(BaseCommand):
             lms_ack=1,
             retired=1
         )
+        exclude_params = dict(pull_time=None)
         filter_params = {}
-        exclude_params = {}
         if options['queue_names']:
             filter_params['queue_name__in'] = options['queue_names'].split(',')
         if options['submission_ids']:
             filter_params['id__in'] = options['submission_ids'].split(',')
-        if not options['include_null_pull_time']:
-            exclude_params['pull_time'] = None
         if options['pull_time_start']:
             filter_params['pull_time__gte'] = parse_iso_8601_string(options['pull_time_start'])
         if options['pull_time_end']:
@@ -100,7 +90,7 @@ class Command(BaseCommand):
             .exclude(**exclude_params)
             .order_by('-id')
         )
-        if options['echo']:
+        if options['dry_run']:
             pp = pprint.PrettyPrinter(indent=2)
             for submission in submission_qset.values(*self.ECHO_PROPERTIES)[0:self.ECHO_LIMIT]:
                 self.stdout.write(pp.pformat(submission))
