@@ -2,7 +2,6 @@ import logging
 
 from django.core.management.base import BaseCommand
 from django.conf import settings
-from django.db.models import Q
 from django.utils import timezone
 from datetime import datetime, timedelta
 import pprint
@@ -62,9 +61,9 @@ class Command(BaseCommand):
             help='Requeue the submissions even if the pull_time value is null (None)',
         )
         parser.add_argument(
-            '--echo',
+            '--dry-run',
             action='store_true',
-            dest='echo',
+            dest='dry_run',
             default=False,
             help='Echo the submissions that will be queued for grading (instead of actually queueing them)',
         )
@@ -100,7 +99,7 @@ class Command(BaseCommand):
             .exclude(**exclude_params)
             .order_by('-id')
         )
-        if options['echo']:
+        if options['dry_run']:
             pp = pprint.PrettyPrinter(indent=2)
             for submission in submission_qset.values(*self.ECHO_PROPERTIES)[0:self.ECHO_LIMIT]:
                 self.stdout.write(pp.pformat(submission))

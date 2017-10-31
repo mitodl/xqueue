@@ -21,6 +21,8 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
         'NAME': 'test_xqueue',
+        'USERNAME': 'vagrant',
+        'PASSWORD': 'password',
 
         'TEST': {
             # We need to use TEST['NAME'] here,
