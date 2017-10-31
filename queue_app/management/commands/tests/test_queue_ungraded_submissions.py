@@ -6,11 +6,12 @@ from django.utils.six import StringIO
 
 
 class TestQueueUngradedSubmissions(TestCase):
+    @classmethod
     def setUpClass(cls):
         cls.stdout = StringIO()
 
     def setUp(self):
-        patcher = mock.patch('queue.producer.push_to_queue')
+        patcher = mock.patch('queue_app.producer.push_to_queue')
         self.mock_push_to_queue = patcher.start()
 
     def tearDown(self):
