@@ -54,13 +54,6 @@ class Command(BaseCommand):
             help='Requeue the submissions even if their num_failures is greater than the max in settings',
         )
         parser.add_argument(
-            '--include-null-pull-time',
-            action='store_true',
-            dest='include_null_pull_time',
-            default=False,
-            help='Requeue the submissions even if the pull_time value is null (None)',
-        )
-        parser.add_argument(
             '--dry-run',
             action='store_true',
             dest='dry_run',
@@ -73,14 +66,12 @@ class Command(BaseCommand):
             lms_ack=1,
             retired=1
         )
+        exclude_params = dict(pull_time=None)
         filter_params = {}
-        exclude_params = {}
         if options['queue_names']:
             filter_params['queue_name__in'] = options['queue_names'].split(',')
         if options['submission_ids']:
             filter_params['id__in'] = options['submission_ids'].split(',')
-        if not options['include_null_pull_time']:
-            exclude_params['pull_time'] = None
         if options['pull_time_start']:
             filter_params['pull_time__gte'] = parse_iso_8601_string(options['pull_time_start'])
         if options['pull_time_end']:
